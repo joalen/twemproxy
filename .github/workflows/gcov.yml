@@ -52,7 +52,7 @@ jobs:
 
           run_with_gcov() {
             local executable="$1"
-            output="$("$executable" 2>/dev/null)"  # Suppress stderr
+            timeout -s SIGQUIT 30s $executable" 2>/dev/null
             local exit_status=$?
             
             if [ $exit_status -eq 124 ]; then
