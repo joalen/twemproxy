@@ -52,10 +52,10 @@ jobs:
 
           run_with_gcov() {
             local executable="$1"
-            timeout -s SIGQUIT 30s $executable" 2>/dev/null
+            timeout -s SIGQUIT 30s "$executable" 2>/dev/null
             local exit_status=$?
             
-            if [ $exit_status -eq 2 ]; then
+            if [ $exit_status -eq 124 ]; then
               echo "Command timed out after 10 seconds: $executable"
               return  # Skip gcov analysis on timeout
             fi
