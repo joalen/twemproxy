@@ -1,0 +1,84 @@
+name: Run Valgrind
+
+on:
+  push:
+
+jobs:
+  run-vmwarechap:
+    name: '${{ matrix.os }}'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2 
+        with:
+          ref: 60aaf855ba2e15e20d0efbe440c8ff071b719580
+          
+      - name: Build repository 
+        run: | 
+          autoreconf -fvi 
+          ./configure --enable-debug=full && make
+
+      - name: Install Valgrind
+        if: runner.os == 'Linux'
+        run: | 
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+      
+      - name: Run Valgrind
+        run: |
+          #!/bin/bash
+          set +e 
+          mkdir -p valgrind_reports
+          
+          is_executable() {
+            local file="$1"
+            if file "$file" | grep -q 'ELF 64-bit'; then
+              return 0
+            else
+              return 1
+            fi
+          }
+          run_with_valgrind() {
+            local executable="$1"
+            local tool="$2"
+            local tool_name="$3"
+            local valgrind_options="--read-inline-info=yes --trace-children=yes -v -v"
+            if [ "$tool" == "memcheck" ]; then
+              valgrind_options+=" --leak-check=full --show-leak-kinds=all --track-origins=yes"
+            fi
+            timeout 60s valgrind --tool="$tool" $valgrind_options --log-file="./valgrind_reports/$(basename "$file")-${tool_name}_valgrind_report.txt" "$executable"
+            local exit_status=$?
+            if [ $exit_status -eq 124 ]; then
+              return
+            fi
+          }
+          tools=(
+            "memcheck Memcheck"
+            "cachegrind Cachegrind"
+            "callgrind Callgrind"
+            "helgrind Helgrind"
+            "drd DRD"
+            "massif Massif"
+            "dhat DHAT"
+            "lackey Lackey"
+            "none None"
+            "exp-bbv exp-bbv"
+          )
+          find . -type f -executable | while read -r file; do
+            if is_executable "$file"; then
+              for tool_info in "${tools[@]}"; do
+                tool=(${tool_info})
+                run_with_valgrind "$file" "${tool[0]}" "${tool[1]}"
+              done
+            fi
+          done
+          
+      - name: Upload Valgrind reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: valgrind-report-${{ github.event.repository.name}}-on-${{ matrix.os }}-from_branch_${{ github.ref_name }}
+          path: './valgrind_reports/*'
